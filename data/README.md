@@ -1,3 +1,8 @@
 # Initialization file for data folder
 
-## This folder will contain the opacity table and the values output by parts a and b.
+## Opacity table exists on local machine:
+    * first row contains log(R) values
+    * first column contains log(T) values
+    * table contains log(opacity) values for log(R), log(T) combo
+
+## Other files are output by Part A and Part B to this folder
