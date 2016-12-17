@@ -70,6 +70,11 @@ int main(int argc, char * argv[]){
     Z = 0.02;
     M = 2.82*Msun;
 
+    /* choose step size */
+    dm = M * pow(10.0,-5);
+    /* initialize mass with nonzero value */
+    m = dm;
+
     /* get mean molecular weight */
     mu = compute_mu(X,Y,Z);
 
@@ -82,11 +87,6 @@ int main(int argc, char * argv[]){
         N_Trow, N_Rcol);
     epsilon = compute_energy(rho, Tc, X, Y, Z);
     gamma2 = compute_gamma2(Pc, Tc);
-
-    /* choose step size */
-    dm = M * pow(10.0,-5);
-    /* initialize mass with nonzero value */
-    m = dm;
 
     /* get r, L slightly off center and recompute values */
     r = compute_center_radius(m, rho);
@@ -110,13 +110,14 @@ int main(int argc, char * argv[]){
     gamma2 = compute_gamma2(P, T);
     dTdr_ratio = compute_ratio(kappa, gamma2, m, L, T, P);
 
+    /* File for output data */
     char filename[256];
     FILE *file;
     snprintf(filename, 256, "../data/forward.dat");
     file = fopen(filename, "a");
 
+    /* only write if we have a good solution */
     if(write_flag==1){
-
         fprintf(file, "m(Msun)\tlogP\tlogT\tlogrho\tr(Rsun)\tL(Lsun)\topac\tenergy\tratio\n");
         fprintf(file, "%lf\t%lf\t%lf\t%lf\t%lf\t%lf\t%lf\t%lf\t%lf\n",
                 m/Msun, log10(P), log10(T), log10(rho), r/Rsun, L/Lsun, kappa, epsilon, dTdr_ratio);
@@ -124,45 +125,49 @@ int main(int argc, char * argv[]){
 
     /* Perform forward integration */
     while(m<M/2.0){
+
+        /* compute all derivatives */
         drdm = compute_drdm(rho, r);
         dPdm = compute_dPdm(m, r);
         dLdm = compute_dLdm(epsilon);
         dTdr_ratio = compute_ratio(kappa, gamma2, m, L, T, P);
         dTdm = compute_dTdm(T, P, m, r, gamma2, kappa, L, dTdr_ratio);
 
+        /* update values */
         r = r + drdm*dm;
         P = P + dPdm*dm;
         L = L + dLdm*dm;
         T = T + dTdm*dm;
         m = m + dm;
 
+        /* calculate new quantities based on updated values */
         rho = compute_density(P,T,X,Y,Z);
         kappa = compute_opacity(X,Y,Z,rho,T,opac_Trow,opac_logT,opac_logR,N_Trow,N_Rcol);
         epsilon = compute_energy(rho,T,X,Y,Z);
         gamma2 = compute_gamma2(P,T);
+
+        /* output step to file */
         if(write_flag==1){
             fprintf(file, "%lf\t%lf\t%lf\t%lf\t%lf\t%lf\t%lf\t%lf\t%lf\n",
                     m/Msun, log10(P), log10(T), log10(rho), r/Rsun, L/Lsun, kappa, epsilon, dTdr_ratio);
         }
-
     }
     fclose(file);
 
-
+    /* ending values of P, T, r, and L */
     double logP_low, logT_low, logr_low, logL_low;
     logP_low = log10(P);
     logT_low = log10(T);
     logr_low = log10(r);
     logL_low = log10(L);
 
-    /* now reset things to the surface and integrate backwards */
+    /* now set things to the surface and integrate backwards */
     m = M;
     r = Rs;
     L = Ls;
     T = pow(L/(4.0*M_PI*r*r*sigma), 0.25);
     rho = 1.0e-5;
     P = a_rad*pow(T,4.0)/3.0 + N_avo*k_boltz*rho*T/mu;
-    // rho = compute_density(P,T,X,Y,Z);
     kappa = compute_opacity(X,Y,Z,rho,T,opac_Trow,opac_logT,opac_logR,N_Trow,N_Rcol);
     epsilon = compute_energy(rho,T,X,Y,Z);
     gamma2 = compute_gamma2(P,T);
@@ -179,41 +184,47 @@ int main(int argc, char * argv[]){
 
     /* Perform backward integration */
     while(m>M/2.0){
+
+        /* compute all derivatives */
         drdm = compute_drdm(rho, r);
         dPdm = compute_dPdm(m, r);
         dLdm = compute_dLdm(epsilon);
         dTdr_ratio = compute_ratio(kappa, gamma2, m, L, T, P);
         dTdm = compute_dTdm(T, P, m, r, gamma2, kappa, L, dTdr_ratio);
 
+        /* update values */
         r = r - drdm*dm;
         P = P - dPdm*dm;
         L = L - dLdm*dm;
         T = T - dTdm*dm;
         m = m - dm;
 
+        /* calculate new quantities based on updated values */
         rho = compute_density(P,T,X,Y,Z);
         kappa = compute_opacity(X,Y,Z,rho,T,opac_Trow,opac_logT,opac_logR,N_Trow,N_Rcol);
         epsilon = compute_energy(rho,T,X,Y,Z);
         gamma2 = compute_gamma2(P,T);
+
+        /* output step to file */
         if(write_flag==1){
             fprintf(file, "%lf\t%lf\t%lf\t%lf\t%lf\t%lf\t%lf\t%lf\t%lf\n",
                     m/Msun, log10(P), log10(T), log10(rho), r/Rsun, L/Lsun, kappa, epsilon, dTdr_ratio);
         }
-
     }
     fclose(file);
 
+    /* ending values of P, T, r, and L */
     double logP_high, logT_high, logr_high, logL_high;
     logP_high = log10(P);
     logT_high = log10(T);
     logr_high = log10(r);
     logL_high = log10(L);
 
+    /* get differences and write to file */
     double dlogP = logP_high - logP_low;
     double dlogT = logT_high - logT_low;
     double dlogr = logr_high - logr_low;
     double dlogL = logL_high - logL_low;
-
     fprintf(stdout, "%lf\t%lf\t%lf\t%lf\n", dlogP, dlogT, dlogr, dlogL);
 
     /* Free allocated values */

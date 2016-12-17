@@ -1,6 +1,6 @@
 #!/usr/bin/bash
 
-rm ../data/output.dat
+rm ../data/part_a.dat
 time ./bin/part_a
 
 python plot_results.py

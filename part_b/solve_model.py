@@ -3,35 +3,32 @@ import os, sys
 # import matplotlib.pyplot as plt
 import numpy as np
 
+# Get partial derivative
 def partialY_partialX(Y_plus, Y_minus, dX):
 
     return (Y_plus - Y_minus)/(2.0*dX)
 
-
 def main():
 
     # starting values
-    # logTc=7.0
-    # logPc=16.0
-    # logRs=11.2
-    # logLs=35.3
-    # logTc =  7.10019214034
-    # logPc =  15.4172171984
-    # logRs =  11.4266299533
-    # logLs =  33.5483086969
-    logTc = 7.3603409
-    logPc = 17.08978075
-    logRs = 11.2071220
-    logLs = 35.3520750
+    logTc =  7.36005299771
+    logPc =  17.0933196124
+    logRs =  11.2068629231
+    logLs =  35.3504487033
+
+    # control how we calculate the derivatives
     fraction = 0.001
+
     # step sizes
     dlogT = fraction*logTc
     dlogP = fraction*logPc
     dlogR = fraction*logRs
     dlogL = fraction*logLs
 
+    # control size of step for new test values (after computing derivatives)
     step_fraction = 0.1
 
+    # tolerances for ending loop
     log_tol = 0.001
 
     '''
@@ -43,18 +40,19 @@ def main():
     elegant. It exploits that this is the data structure.
     '''
 
-    i = 0
-    step_limit = 100
+    i = 0   # step counter
+    step_limit = 100    # set limit to avoid infinite loop
 
     while(i<step_limit):
 
+        # print info
         print('On step ' + str(i))
-
         print("logTc = ", logTc)
         print("logPc = ", logPc)
         print("logRs = ", logRs)
         print("logLs = ", logLs)
 
+        # perform trial; called "fiducial"
         fname = "../data/trial.dat"
         cmd = ( "./bin/part_b " + str(logTc) + ' ' + str(logPc) + ' ' + str(logRs)
                 + ' ' + str(logLs) + ' ' + str(0) + ' > ' + fname )
@@ -66,13 +64,13 @@ def main():
         print("delta(LogRs) = ", fiducial[2])
         print("delta(LogLs) = ", fiducial[3])
 
+        # Check if we're within our tolerance threshhold and end if so
         if(np.all(np.fabs(fiducial)<log_tol)):
             fname = "../data/trial.dat"
             cmd = ( "./bin/part_b " + str(logTc) + ' ' + str(logPc) + ' ' + str(logRs)
                     + ' ' + str(logLs) + ' ' + str(1) + ' > ' + fname )
             os.system(cmd)
             break
-
 
         # Calculate new trial values
         logT_m = logTc - dlogT
@@ -159,19 +157,20 @@ def main():
         diff_mat[3,2] = partialY_partialX(Lplus[2], Lminus[2], dlogR)
         diff_mat[3,3] = partialY_partialX(Lplus[3], Lminus[3], dlogL)
 
+        # Determine new step by inverting matrix
         inv_mat = np.linalg.inv(diff_mat)
-
         steps = inv_mat.dot(-fiducial)
-
         steps *= step_fraction
 
-        i = i+1
-
+        # Set new values
         logTc+=steps[0]
         logPc+=steps[1]
         logRs+=steps[2]
         logLs+=steps[3]
 
+        i = i+1
+
+    # Plot now that we've converged
     cmd = 'python plot_results.py'
     os.system(cmd)
 

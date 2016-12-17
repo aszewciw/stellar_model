@@ -4,7 +4,7 @@
 /* --------------------  Density-related functions  ---------------------- */
 /* ----------------------------------------------------------------------- */
 
-/* compute mu_ion */
+/* compute ion mean molecular weight */
 double compute_mu_ion(double X, double Y, double Z){
     /*
     X, Y, Z - mass fractions of H, He, metals
@@ -24,11 +24,10 @@ double compute_mu_ion(double X, double Y, double Z){
 }
 /* ----------------------------------------------------------------------- */
 
-/* compute mu_e */
+/* compute electron mean molecular weight */
 double compute_mu_e(double X, double Y, double Z){
     /*
-    X, Y, Z -       mass fractions of H, He, metals
-    y_X, y_Y, y_Z - ionization fractions
+    X, Y, Z - mass fractions of H, He, metals
 
     Assume that A_Z / Q_Z = 2.
     */
@@ -51,8 +50,7 @@ double compute_mu_e(double X, double Y, double Z){
 /* compute mean molecular weight */
 double compute_mu(double X, double Y, double Z){
     /*
-    X, Y, Z -       mass fractions of H, He, metals
-    y_X, y_Y, y_Z - ionization fractions
+    X, Y, Z - mass fractions of H, He, metals
     */
 
     double mu, mu_i, mu_e;
@@ -66,9 +64,13 @@ double compute_mu(double X, double Y, double Z){
 }
 /* ----------------------------------------------------------------------- */
 
+/* compute density at current layer */
 double compute_density(double P, double T, double X, double Y, double Z){
 
-    /* make sure pressure doesn't drop below (1/3)*a*T^4 */
+    /*
+    P, T    - pressure, temperature
+    X, Y, Z - mass fractions of H, He, metals
+    */
 
     double mu = compute_mu(X, Y, Z);
     double rho;
@@ -83,9 +85,16 @@ double compute_density(double P, double T, double X, double Y, double Z){
 /* --------------------  Opacity-related functions  ---------------------- */
 /* ----------------------------------------------------------------------- */
 
+/* Perform bilinear interpolation */
 double BilinearInterpolation(double q11, double q12, double q21, double q22,
     double x1, double x2, double y1, double y2, double x, double y)
 {
+    /*
+    For input values x, y return an interpolated value "q"
+    x1, x2, y1, y2 - input values between which we'll interpolate:
+        x1<x<x2, y1<y<y2
+    qij - function value of xi, yj, where i,j = 1 or 2
+    */
 
     double x2x1, y2y1, x2x, y2y, yy1, xx1;
 
@@ -106,28 +115,32 @@ double BilinearInterpolation(double q11, double q12, double q21, double q22,
 
 /* ----------------------------------------------------------------------- */
 
+/* opacity due to electron scattering */
 double compute_opacity_escatt(double X){
     return 0.2*(1.0+X);
 }
 /* ----------------------------------------------------------------------- */
 
+/* opacity due to free-free absorption */
 double compute_opacity_ffabs(double X, double Y, double rho, double T){
     return 4.0e22 * (X+Y) * (1.0+X) * rho * pow(T, -3.5);
 }
 /* ----------------------------------------------------------------------- */
 
+/* opacity due to bound-free absorption */
 double compute_opacity_bfabs(double X, double Z, double rho, double T){
     return 4.0e25 * Z * (1.0+X) * rho * pow(T, -3.5);
 }
 /* ----------------------------------------------------------------------- */
 
+/* H opacity */
 double compute_opacity_H(double Z, double rho, double T){
     return 2.5e-31 * (Z/0.02) * pow(rho, 0.5) * pow(T,9);
 }
 /* ----------------------------------------------------------------------- */
 
-double compute_opacity_approximate(double X, double Y, double Z, double rho,
-    double T){
+/* compute approximate opacity when table doesn't work */
+double compute_opacity_approximate(double X, double Y, double Z, double rho, double T){
 
     double k_e, k_ff, k_bf, k_H, k_tot, k_tmp;
 
@@ -141,9 +154,9 @@ double compute_opacity_approximate(double X, double Y, double Z, double rho,
 
     return k_tot;
 }
-
 /* ----------------------------------------------------------------------- */
 
+/* find value of R for use in opacity table */
 double compute_R(double T, double rho){
 
     double R;
@@ -152,25 +165,29 @@ double compute_R(double T, double rho){
 
     return R;
 }
-
 /* ----------------------------------------------------------------------- */
 
+/* find opacity */
 double compute_opacity(double X, double Y, double Z, double rho, double T,
     OPAC_TROW *opac_Trow, double *opac_logT, double *opac_logR, int N_Trow, int N_Rcol){
 
-    // fprintf(stderr, "In the function\n");
+    /*
+    find opacity by interpolating between opacity table when applicable;
+    use approximation when reaching table's limits
+    */
+
     double R, logT, logR, kappa;
     double T1, T2, R1, R2, k11, k12, k21, k22;
     int i, j;
-    int flag = 0;
+    int flag = 0;   /* tell us when to use table vs. approximation */
 
     R = compute_R(T, rho);
     logT = log10(T);
     logR = log10(R);
 
+    /* Find index of table's logT value that is < logT */
     i = 0;
     while(i<N_Trow-1){
-        // fprintf(stderr, "i: %d\n", i);
         T1 = opac_logT[i];
         T2 = opac_logT[i+1];
         if((logT>T1)&&(logT<T2)){
@@ -179,9 +196,9 @@ double compute_opacity(double X, double Y, double Z, double rho, double T,
         i++;
     }
 
+    /* Find index of table's logR value that is < logR */
     j = 0;
     while(j<N_Rcol-1){
-        // fprintf(stderr, "j: %d\n", j);
         R1 = opac_logR[j];
         R2 = opac_logR[j+1];
         if( (logR>R1)&&(logR<R2) ){
@@ -190,31 +207,33 @@ double compute_opacity(double X, double Y, double Z, double rho, double T,
         j++;
     }
 
+    /* check if we're outside of the table */
     if( (i==N_Trow-1)||(j==N_Rcol-1) ){
         flag = 1;
     }
     else{
+        /* we're inside the table */
         k11 = opac_Trow[i].Rcol[j];
         k12 = opac_Trow[i].Rcol[j+1];
         k21 = opac_Trow[i+1].Rcol[j];
         k22 = opac_Trow[i+1].Rcol[j+1];
+        /* change flag if we have nonsense values for the table */
         if( (k11==-99999.0) || (k12==-99999.0) || (k21==-99999.0) || (k22==-99999.0) ){
             flag = 1;
         }
     }
 
     if(flag==1){
-        // fprintf(stderr, "approximate opacity\n");
+        /* table does not work for current values */
         kappa = compute_opacity_approximate(X, Y, Z, rho, T);
     }
     else{
-        // fprintf(stderr, "linear interpolation\n");
+        /* use table to interpolate */
         kappa = BilinearInterpolation(k11, k12, k21, k22, T1, T2, R1, R2, logT, logR);
         kappa = pow(10.0,kappa);
     }
 
     return kappa;
-
 }
 /* ----------------------------------------------------------------------- */
 
@@ -222,6 +241,7 @@ double compute_opacity(double X, double Y, double Z, double rho, double T,
 /* ---------------------  Energy-related functions  ---------------------- */
 /* ----------------------------------------------------------------------- */
 
+/* energy generation rate from proton proton chain */
 double pp_chain(double rho, double T, double X){
 
     double T9 = T/1.0e9;
@@ -231,9 +251,9 @@ double pp_chain(double rho, double T, double X){
                 / pow(T9,(2.0/3.0)) );
     return energy;
 }
-
 /* ----------------------------------------------------------------------- */
 
+/* energy generation rate from cno cycle */
 double cno_cycle(double rho, double T, double X, double Z){
 
     double T9 = T/1.0e9;
@@ -245,6 +265,7 @@ double cno_cycle(double rho, double T, double X, double Z){
 }
 /* ----------------------------------------------------------------------- */
 
+/* energy generation rate from triple alpha process */
 double triple_alpha(double rho, double T, double Y){
 
     double T9 = T/1.0e9;
@@ -257,6 +278,7 @@ double triple_alpha(double rho, double T, double Y){
 }
 /* ----------------------------------------------------------------------- */
 
+/* total energy generation rate */
 double compute_energy(double rho, double T, double X, double Y, double Z){
 
     double e_tot, e_pp, e_cno, e_alpha;
@@ -276,6 +298,7 @@ double compute_energy(double rho, double T, double X, double Y, double Z){
 /* ----------------------  Gamma-related functions  ---------------------- */
 /* ----------------------------------------------------------------------- */
 
+/* compute gas pressure */
 double compute_P_gas(double P_tot, double T){
 
     /* Get gas pressure by subtracting radiation pressure */
@@ -286,6 +309,7 @@ double compute_P_gas(double P_tot, double T){
 
     P_gas = P_tot - P_rad;
 
+    /* exit code if Ptot<Prad */
     if(P_gas < 0.0){
         fprintf(stderr, "Error! Gas pressure is negative! Exiting code...\n");
         exit(-1);
@@ -295,6 +319,7 @@ double compute_P_gas(double P_tot, double T){
 }
 /* ----------------------------------------------------------------------- */
 
+/* compute gamma2 factor */
 double compute_gamma2(double P, double T){
 
     double B;
@@ -308,22 +333,27 @@ double compute_gamma2(double P, double T){
 
     return gamma2;
 }
-
 /* ----------------------------------------------------------------------- */
 
+/* d(radius)/d(mass) */
 double compute_drdm(double rho, double r){
     return(0.25 / (M_PI * r * r * rho));
 }
+/* ----------------------------------------------------------------------- */
 
+/* d(pressure)/d(mass) */
 double compute_dPdm(double m, double r){
     return( (-0.25*G*m)/(M_PI*pow(r,4)) );
 }
+/* ----------------------------------------------------------------------- */
 
+/* d(luminosity)/d(mass) */
 double compute_dLdm(double epsilon){
     return epsilon;
 }
+/* ----------------------------------------------------------------------- */
 
-
+/* compute [dT/dr]_radiative/[dT/dr]_adiabatic */
 double compute_ratio(double kappa, double gamma2, double m, double L, double T, double P){
 
     double ratio;
@@ -332,7 +362,9 @@ double compute_ratio(double kappa, double gamma2, double m, double L, double T, 
 
     return ratio;
 }
+/* ----------------------------------------------------------------------- */
 
+/* d(temperature)/d(mass) */
 double compute_dTdm(double T, double P, double m, double r, double gamma2, double kappa, double L, double ratio){
 
     double dTdm;
@@ -344,14 +376,17 @@ double compute_dTdm(double T, double P, double m, double r, double gamma2, doubl
     else{
         dTdm = -3.0*kappa*L/(64.0*M_PI*M_PI*a_rad*c*pow(r,4)*pow(T,3));
     }
-
     return dTdm;
 }
+/* ----------------------------------------------------------------------- */
 
+/* compute radius at the center */
 double compute_center_radius(double m, double rho){
     return pow( (0.75*m/M_PI/rho), (1.0/3.0) );
 }
+/* ----------------------------------------------------------------------- */
 
+/* compute luminosity at the center */
 double compute_center_luminosity(double m, double epsilon){
     return epsilon*m;
 }
